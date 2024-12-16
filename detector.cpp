@@ -98,39 +98,34 @@ cv::Mat filterColors(const cv::Mat& image) {
     }
 
     return output;
-    // // Filter white pixels
-    // int white_threshold = 200; //130
-    // cv::Scalar lower_white(white_threshold, white_threshold, white_threshold);
-    // cv::Scalar upper_white(255, 255, 255);
-    // cv::Mat white_mask;
-    // cv::inRange(image, lower_white, upper_white, white_mask);
-    // cv::Mat white_image;
-    // cv::bitwise_and(image, image, white_image, white_mask);
-
-    // // Filter yellow pixels
-    // cv::Mat hsv;
-    // cv::cvtColor(image, hsv, cv::COLOR_BGR2HSV);
-    // cv::Scalar lower_yellow(90, 100, 100);
-    // cv::Scalar upper_yellow(110, 255, 255);
-    // cv::Mat yellow_mask;
-    // cv::inRange(hsv, lower_yellow, upper_yellow, yellow_mask);
-    // cv::Mat yellow_image;
-    // cv::bitwise_and(image, image, yellow_image, yellow_mask);
-
-    // // Combine the two above images
-    // cv::Mat image2;
-    // cv::addWeighted(white_image, 1.0, yellow_image, 1.0, 0.0, image2);
-
-    // return image2;
 }
 
 
 cv::Mat grayscale(const cv::Mat& img) {
-    // Applies the Grayscale transform
-    // This will return an image with only one color channel
-    cv::Mat gray;
-    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    // Create a single-channel output image with the same size as the input
+    cv::Mat gray(img.rows, img.cols, CV_8UC1);
+
+    // Iterate over each pixel
+    for (int y = 0; y < img.rows; ++y) {
+        for (int x = 0; x < img.cols; ++x) {
+            // Get the BGR values of the current pixel
+            cv::Vec3b bgr = img.at<cv::Vec3b>(y, x);
+
+            // Calculate the grayscale value using the luminance formula
+            // Common formula: 0.299*R + 0.587*G + 0.114*B
+            uchar gray_value = static_cast<uchar>(0.299 * bgr[2] + 0.587 * bgr[1] + 0.114 * bgr[0]);
+
+            // Set the grayscale value in the output image
+            gray.at<uchar>(y, x) = gray_value;
+        }
+    }
+
     return gray;
+    // // Applies the Grayscale transform
+    // // This will return an image with only one color channel
+    // cv::Mat gray;
+    // cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    // return gray;
 }
 
 cv::Mat gaussianBlur(const cv::Mat& img, int kernel_size) {
