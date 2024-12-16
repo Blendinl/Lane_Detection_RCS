@@ -48,32 +48,80 @@ int main() {
 
 
 cv::Mat filterColors(const cv::Mat& image) {
-    // Filter the image to include only yellow and white pixels
+    // Initialize the output image with the same size and type as the input
+    cv::Mat output = cv::Mat::zeros(image.size(), image.type());
 
-    // Filter white pixels
-    int white_threshold = 200; //130
-    cv::Scalar lower_white(white_threshold, white_threshold, white_threshold);
-    cv::Scalar upper_white(255, 255, 255);
-    cv::Mat white_mask;
-    cv::inRange(image, lower_white, upper_white, white_mask);
-    cv::Mat white_image;
-    cv::bitwise_and(image, image, white_image, white_mask);
+    // Iterate over each pixel
+    for (int y = 0; y < image.rows; ++y) {
+        for (int x = 0; x < image.cols; ++x) {
+            // Get the BGR values of the current pixel
+            cv::Vec3b bgr = image.at<cv::Vec3b>(y, x);
 
-    // Filter yellow pixels
-    cv::Mat hsv;
-    cv::cvtColor(image, hsv, cv::COLOR_BGR2HSV);
-    cv::Scalar lower_yellow(90, 100, 100);
-    cv::Scalar upper_yellow(110, 255, 255);
-    cv::Mat yellow_mask;
-    cv::inRange(hsv, lower_yellow, upper_yellow, yellow_mask);
-    cv::Mat yellow_image;
-    cv::bitwise_and(image, image, yellow_image, yellow_mask);
+            // Check if the pixel is white
+            if (bgr[0] >= 200 && bgr[1] >= 200 && bgr[2] >= 200) {
+                output.at<cv::Vec3b>(y, x) = bgr;
+                continue;
+            }
 
-    // Combine the two above images
-    cv::Mat image2;
-    cv::addWeighted(white_image, 1.0, yellow_image, 1.0, 0.0, image2);
+            // Convert BGR to HSV
+            float b = bgr[0] / 255.0f;
+            float g = bgr[1] / 255.0f;
+            float r = bgr[2] / 255.0f;
 
-    return image2;
+            float max_value = std::max({r, g, b});
+            float min_value = std::min({r, g, b});
+            float delta = max_value - min_value;
+
+            float hue = 0;
+
+            if (delta != 0) {
+                if (max_value == r) {
+                    hue = 60 * (fmod(((g - b) / delta), 6));
+                } else if (max_value == g) {
+                    hue = 60 * (((b - r) / delta) + 2);
+                } else if (max_value == b) {
+                    hue = 60 * (((r - g) / delta) + 4);
+                }
+                if (hue < 0) {
+                    hue += 360;
+                }
+            }
+
+            float saturation = max_value == 0 ? 0 : (delta / max_value);
+            float value = max_value;
+
+            // Check if the pixel is yellow
+            if ((hue >= 90 && hue <= 110) && saturation >= (100 / 255.0f) && value >= (100 / 255.0f)) {
+                output.at<cv::Vec3b>(y, x) = bgr;
+            }
+        }
+    }
+
+    return output;
+    // // Filter white pixels
+    // int white_threshold = 200; //130
+    // cv::Scalar lower_white(white_threshold, white_threshold, white_threshold);
+    // cv::Scalar upper_white(255, 255, 255);
+    // cv::Mat white_mask;
+    // cv::inRange(image, lower_white, upper_white, white_mask);
+    // cv::Mat white_image;
+    // cv::bitwise_and(image, image, white_image, white_mask);
+
+    // // Filter yellow pixels
+    // cv::Mat hsv;
+    // cv::cvtColor(image, hsv, cv::COLOR_BGR2HSV);
+    // cv::Scalar lower_yellow(90, 100, 100);
+    // cv::Scalar upper_yellow(110, 255, 255);
+    // cv::Mat yellow_mask;
+    // cv::inRange(hsv, lower_yellow, upper_yellow, yellow_mask);
+    // cv::Mat yellow_image;
+    // cv::bitwise_and(image, image, yellow_image, yellow_mask);
+
+    // // Combine the two above images
+    // cv::Mat image2;
+    // cv::addWeighted(white_image, 1.0, yellow_image, 1.0, 0.0, image2);
+
+    // return image2;
 }
 
 
