@@ -296,27 +296,77 @@ cv::Mat canny(const cv::Mat& img, int low_threshold, int high_threshold) {
     return edges;
 }
 
-cv::Mat regionOfInterest(const cv::Mat& img, const std::vector<std::vector<cv::Point>>& vertices) {
-    // Applies an image mask.
-    // Only keeps the region of the image defined by the polygon formed from `vertices`. The rest of the image is set to black.
+void FillPolygon(cv::Mat& mask, const std::vector<cv::Point>& polygon) {
+    // Scanline algorithm to fill a single polygon in the mask
+    int min_y = mask.rows, max_y = 0;
 
-    // defining a blank mask to start with
-    cv::Mat mask = cv::Mat::zeros(img.size(), img.type());
-
-    // defining a 3 channel or 1 channel color to fill the mask with depending on the input image
-    cv::Scalar ignore_mask_color;
-    if (img.channels() > 1) {
-        ignore_mask_color = cv::Scalar(255, 255, 255);  // Assuming 3 channels (BGR)
-    } else {
-        ignore_mask_color = cv::Scalar(255);
+    // Find Y-range of the polygon
+    for (const auto& pt : polygon) {
+        min_y = std::min(min_y, pt.y);
+        max_y = std::max(max_y, pt.y);
     }
 
-    // filling pixels inside the polygon defined by "vertices" with the fill color
-    cv::fillPoly(mask, vertices, ignore_mask_color);
+    // Iterate over each scanline (y-coordinate) and determine the fill range
+    for (int y = min_y; y <= max_y; ++y) {
+        std::vector<int> intersections;  // X-coordinates of intersections
 
-    // returning the image only where mask pixels are nonzero
-    cv::Mat masked_image;
-    cv::bitwise_and(img, mask, masked_image);
+        // Find intersections of the polygon edges with the scanline
+        for (size_t i = 0; i < polygon.size(); ++i) {
+            cv::Point p1 = polygon[i];
+            cv::Point p2 = polygon[(i + 1) % polygon.size()];
+
+            if ((p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y)) {  // Edge crosses the scanline
+                int x_intersect = p1.x + (y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
+                intersections.push_back(x_intersect);
+            }
+        }
+
+        // Sort intersections and fill between pairs
+        std::sort(intersections.begin(), intersections.end());
+        for (size_t i = 0; i < intersections.size(); i += 2) {
+            int x_start = intersections[i];
+            int x_end = intersections[i + 1];
+            for (int x = x_start; x <= x_end; ++x) {
+                mask.at<uchar>(y, x) = 255;  // Set mask pixel to white
+            }
+        }
+    }
+}
+
+cv::Mat BitwiseAnd(const cv::Mat& img, const cv::Mat& mask) {
+    cv::Mat result = cv::Mat::zeros(img.size(), img.type());
+
+    for (int y = 0; y < img.rows; ++y) {
+        for (int x = 0; x < img.cols; ++x) {
+            if (mask.at<uchar>(y, x) != 0) {  // Mask pixel is non-zero
+                if (img.channels() == 3) {  // For color images
+                    for (int c = 0; c < 3; ++c) {
+                        result.at<cv::Vec3b>(y, x)[c] = img.at<cv::Vec3b>(y, x)[c];
+                    }
+                } else {  // For grayscale images
+                    result.at<uchar>(y, x) = img.at<uchar>(y, x);
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+cv::Mat regionOfInterest(const cv::Mat& img, const std::vector<std::vector<cv::Point>>& vertices) {
+    // Applies an image mask.
+
+    // Step 1: Create a blank mask with the same size as the input image
+    cv::Mat mask = cv::Mat::zeros(img.rows, img.cols, CV_8UC1);
+
+    // Step 2: Manually fill the polygon using a scanline fill algorithm
+    for (const auto& polygon : vertices) {
+        FillPolygon(mask, polygon);  // Custom polygon filling function
+    }
+
+    // Step 3: Manually perform bitwise AND operation between the mask and input image
+    cv::Mat masked_image = BitwiseAnd(img, mask);
+
     return masked_image;
 }
 
