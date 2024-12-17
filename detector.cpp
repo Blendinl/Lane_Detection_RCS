@@ -128,10 +128,72 @@ cv::Mat grayscale(const cv::Mat& img) {
     // return gray;
 }
 
+std::vector<std::vector<float>> generateGaussianKernel(int kernel_size, float sigma) {
+    std::vector<std::vector<float>> kernel(kernel_size, std::vector<float>(kernel_size));
+    float sum = 0.0; // For normalization
+    int half_size = kernel_size / 2;
+
+    // Generate the Gaussian kernel
+    for (int x = -half_size; x <= half_size; x++) {
+        for (int y = -half_size; y <= half_size; y++) {
+            float value = std::exp(-(x * x + y * y) / (2 * sigma * sigma)) / (2 * M_PI * sigma * sigma);
+            kernel[x + half_size][y + half_size] = value;
+            sum += value;
+        }
+    }
+
+    // Normalize the kernel so that the sum is 1
+    for (int i = 0; i < kernel_size; i++) {
+        for (int j = 0; j < kernel_size; j++) {
+            kernel[i][j] /= sum;
+        }
+    }
+
+    return kernel;
+}
+
 cv::Mat gaussianBlur(const cv::Mat& img, int kernel_size) {
-    // Applies a Gaussian Noise kernel
-    cv::Mat blurred;
-    cv::GaussianBlur(img, blurred, cv::Size(kernel_size, kernel_size), 0);
+    int half_size = kernel_size / 2;
+    float sigma = 0.3 * ((kernel_size - 1) * 0.5 - 1) + 0.8; // Automatic sigma calculation
+
+    // Generate the Gaussian kernel
+    std::vector<std::vector<float>> kernel = generateGaussianKernel(kernel_size, sigma);
+
+    // Create output image (same size as input, and same type)
+    cv::Mat blurred = cv::Mat::zeros(img.size(), img.type());
+
+    // Iterate over each pixel in the input image
+    for (int y = 0; y < img.rows; y++) {
+        for (int x = 0; x < img.cols; x++) {
+            float sum = 0.0;
+            float weight_sum = 0.0;
+
+            // Apply convolution with Gaussian kernel
+            for (int ky = -half_size; ky <= half_size; ky++) {
+                for (int kx = -half_size; kx <= half_size; kx++) {
+                    int neighbor_x = x + kx;
+                    int neighbor_y = y + ky;
+
+                    // Boundary check (replicate edge pixels)
+                    neighbor_x = std::min(std::max(neighbor_x, 0), img.cols - 1);
+                    neighbor_y = std::min(std::max(neighbor_y, 0), img.rows - 1);
+
+                    // Access the intensity of the neighbor pixel (grayscale image assumed)
+                    float pixel_value = static_cast<float>(img.at<uchar>(neighbor_y, neighbor_x));
+
+                    // Gaussian weight
+                    float weight = kernel[ky + half_size][kx + half_size];
+
+                    sum += pixel_value * weight;
+                    weight_sum += weight;
+                }
+            }
+
+            // Assign the blurred value to the output image
+            blurred.at<uchar>(y, x) = static_cast<uchar>(sum / weight_sum);
+        }
+    }
+
     return blurred;
 }
 
