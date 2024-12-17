@@ -197,10 +197,102 @@ cv::Mat gaussianBlur(const cv::Mat& img, int kernel_size) {
     return blurred;
 }
 
+// Step 3: Sobel Operator to compute gradients
+void sobelOperator(const cv::Mat& img, cv::Mat& magnitude, cv::Mat& direction) {
+    cv::Mat grad_x = cv::Mat::zeros(img.size(), CV_32F);
+    cv::Mat grad_y = cv::Mat::zeros(img.size(), CV_32F);
+
+    float Gx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    float Gy[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+
+    for (int y = 1; y < img.rows - 1; y++) {
+        for (int x = 1; x < img.cols - 1; x++) {
+            float sum_x = 0.0, sum_y = 0.0;
+
+            for (int ky = -1; ky <= 1; ky++) {
+                for (int kx = -1; kx <= 1; kx++) {
+                    int pixel = img.at<uchar>(y + ky, x + kx);
+                    sum_x += pixel * Gx[ky + 1][kx + 1];
+                    sum_y += pixel * Gy[ky + 1][kx + 1];
+                }
+            }
+
+            grad_x.at<float>(y, x) = sum_x;
+            grad_y.at<float>(y, x) = sum_y;
+
+            magnitude.at<float>(y, x) = std::sqrt(sum_x * sum_x + sum_y * sum_y);
+            direction.at<float>(y, x) = std::atan2(sum_y, sum_x);
+        }
+    }
+}
+
+// Step 4: Non-Maximum Suppression
+cv::Mat nonMaximumSuppression(const cv::Mat& magnitude, const cv::Mat& direction) {
+    cv::Mat suppressed = cv::Mat::zeros(magnitude.size(), CV_8U);
+
+    for (int y = 1; y < magnitude.rows - 1; y++) {
+        for (int x = 1; x < magnitude.cols - 1; x++) {
+            float angle = direction.at<float>(y, x) * (180.0 / M_PI);
+            angle = std::fmod(angle + 180, 180); // Normalize angle to [0, 180)
+
+            float mag = magnitude.at<float>(y, x);
+            float neighbor1 = 0, neighbor2 = 0;
+
+            if ((0 <= angle && angle < 22.5) || (157.5 <= angle && angle <= 180)) {
+                neighbor1 = magnitude.at<float>(y, x - 1);
+                neighbor2 = magnitude.at<float>(y, x + 1);
+            } else if (22.5 <= angle && angle < 67.5) {
+                neighbor1 = magnitude.at<float>(y - 1, x + 1);
+                neighbor2 = magnitude.at<float>(y + 1, x - 1);
+            } else if (67.5 <= angle && angle < 112.5) {
+                neighbor1 = magnitude.at<float>(y - 1, x);
+                neighbor2 = magnitude.at<float>(y + 1, x);
+            } else if (112.5 <= angle && angle < 157.5) {
+                neighbor1 = magnitude.at<float>(y - 1, x - 1);
+                neighbor2 = magnitude.at<float>(y + 1, x + 1);
+            }
+
+            if (mag >= neighbor1 && mag >= neighbor2) {
+                suppressed.at<uchar>(y, x) = static_cast<uchar>(mag);
+            }
+        }
+    }
+
+    return suppressed;
+}
+
+// Step 5: Double Thresholding and Edge Tracking by Hysteresis
+cv::Mat doubleThresholdAndHysteresis(const cv::Mat& img, int low_thresh, int high_thresh) {
+    cv::Mat edges = cv::Mat::zeros(img.size(), CV_8U);
+
+    for (int y = 0; y < img.rows; y++) {
+        for (int x = 0; x < img.cols; x++) {
+            int pixel = img.at<uchar>(y, x);
+            if (pixel >= high_thresh) {
+                edges.at<uchar>(y, x) = 255; // Strong edge
+            } else if (pixel >= low_thresh) {
+                edges.at<uchar>(y, x) = 128; // Weak edge
+            }
+        }
+    }
+
+    return edges;
+}
+
 cv::Mat canny(const cv::Mat& img, int low_threshold, int high_threshold) {
-    // Applies the Canny transform
-    cv::Mat edges;
-    cv::Canny(img, edges, low_threshold, high_threshold);
+    // Input: already Gaussian-blurred image
+    cv::Mat magnitude = cv::Mat::zeros(img.size(), CV_32F);
+    cv::Mat direction = cv::Mat::zeros(img.size(), CV_32F);
+
+    // Step 1: Compute gradients using Sobel operator
+    sobelOperator(img, magnitude, direction);
+
+    // Step 2: Non-Maximum Suppression to thin edges
+    cv::Mat suppressed = nonMaximumSuppression(magnitude, direction);
+
+    // Step 3: Double Thresholding and Edge Tracking by Hysteresis
+    cv::Mat edges = doubleThresholdAndHysteresis(suppressed, low_threshold, high_threshold);
+
     return edges;
 }
 
